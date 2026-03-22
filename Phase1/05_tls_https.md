@@ -487,6 +487,9 @@ echo | openssl s_client -connect google.com:443 2>/dev/null | openssl x509 -text
 # 4. Subject Alternative Names (SAN) — all domains this cert covers
 # 5. Public Key algorithm and size
 # 6. Signature algorithm
+#
+# Expected result: You can identify the cert's CN, issuer CA, SAN list,
+# key size, and calculate how many days until it expires.
 ```
 
 ### Lab 2: Create Your Own CA and Sign a Certificate
@@ -516,6 +519,9 @@ curl https://localhost:8443
 # 6. Connect WITH custom CA:
 curl --cacert myCA.crt https://localhost:8443
 # → Success!
+#
+# Expected result: You understand why curl fails without --cacert and succeeds
+# with it. You can explain the trust chain: leaf cert → your CA → trust store.
 ```
 
 ### Lab 3: Check Certificate Expiry Across Services
@@ -681,6 +687,141 @@ cert-manager → Automates cert issuance from Let's Encrypt
 Ingress → References a TLS Secret (cert + key)
 Service Mesh → Automatic mTLS between all pods
 API Server → mTLS on port 6443
+```
+
+---
+
+## 14. cert-manager — Automating TLS in Kubernetes
+
+### The Problem
+
+Setting up HTTPS on K8s requires: a certificate, a private key, and a TLS Secret. Without automation, you manually generate certs, create Secrets, and manage renewals. cert-manager automates the entire lifecycle.
+
+### Architecture
+
+```
+cert-manager (runs in kube-system):
+  → Watches Certificate CRDs
+  → Contacts ACME server (Let's Encrypt) or internal CA
+  → Completes domain validation (HTTP-01 or DNS-01 challenge)
+  → Stores cert + key as a K8s TLS Secret
+  → Auto-renews before expiry (30 days before by default)
+```
+
+### Setup: ClusterIssuer + Certificate + Ingress
+
+```yaml
+# 1. ClusterIssuer — tells cert-manager HOW to get certs
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: devops@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+    - http01:
+        ingress:
+          class: alb       # For AWS LB Controller
+    # OR for DNS validation (wildcard certs, private domains):
+    # - dns01:
+    #     route53:
+    #       region: us-east-1
+    #       hostedZoneID: Z123456
+---
+# 2. Certificate — what cert to issue
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-cert
+  namespace: production
+spec:
+  secretName: api-tls-secret     # ← K8s Secret will be created here
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - api.example.com
+  - www.example.com
+---
+# 3. Ingress — references the TLS Secret
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:...   # ACM for ALB
+    # OR for nginx ingress with cert-manager:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: api-tls-secret    # ← cert-manager manages this
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port: { number: 8080 }
+```
+
+### ACM vs cert-manager — When to Use Each
+
+```
+ACM (AWS Certificate Manager):
+  ✅ Best for: ALB, CloudFront, API Gateway
+  ✅ Free certificates, auto-renewal
+  ✅ Zero K8s overhead
+  ❌ Can't export private key (can't use in nginx Ingress directly)
+  ❌ AWS-only
+
+cert-manager:
+  ✅ Best for: nginx Ingress, Traefik, any non-ALB Ingress
+  ✅ Works with Let's Encrypt (free), Vault, private CAs
+  ✅ Cloud-agnostic
+  ❌ Extra component to manage in cluster
+  ❌ Challenge validation can fail (port 80 blocked, DNS permissions)
+
+Typical EKS pattern:
+  External traffic → ALB with ACM certificate (automatic, free)
+  Internal services → cert-manager with private CA or Let's Encrypt
+  Service mesh → Istio manages mTLS certificates (separate from both)
+```
+
+### Debugging cert-manager
+
+```bash
+# Check certificate status
+kubectl get certificate -A
+# Healthy: READY=True
+
+# If READY=False, dig deeper:
+kubectl describe certificate api-cert -n production
+# → Look at Events and Conditions
+
+# Check the certificate request (one level deeper)
+kubectl get certificaterequest -n production
+kubectl describe certificaterequest <name> -n production
+
+# Check the ACME challenge (if using Let's Encrypt)
+kubectl get challenge -n production
+kubectl describe challenge <name> -n production
+
+# Common issues:
+# ❌ HTTP-01 challenge failed → port 80 not reachable from internet
+# ❌ DNS-01 challenge failed → cert-manager lacks Route53 permissions
+# ❌ Rate limited → too many cert requests to Let's Encrypt
 ```
 
 ---

@@ -125,6 +125,60 @@ Gateway API (future, graduating):
   → Will eventually replace Ingress
 ```
 
+### AWS Load Balancer Controller — IRSA Setup (Critical)
+
+The AWS LB Controller needs IAM permissions to create ALBs, Target Groups, and register targets. Without IRSA (IAM Roles for Service Accounts), ALBs silently fail to create.
+
+**Step 1: Create the IAM Policy**
+```bash
+# Download the official IAM policy
+curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.0/docs/install/iam_policy.json
+
+# Create the IAM policy
+aws iam create-policy \
+  --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://iam-policy.json
+```
+
+**Step 2: Create IRSA (IAM Role + K8s Service Account)**
+```bash
+# Using eksctl (simplest)
+eksctl create iamserviceaccount \
+  --cluster=my-cluster \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --attach-policy-arn=arn:aws:iam::<ACCOUNT>:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+
+# This creates:
+# 1. IAM Role with trust policy for the EKS OIDC provider
+# 2. K8s ServiceAccount annotated with the IAM role ARN
+```
+
+**Step 3: Install the Controller**
+```bash
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=my-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller
+```
+
+**Step 4: Verify It's Working**
+```bash
+# Check controller logs for AWS API calls
+kubectl logs -n kube-system deployment/aws-load-balancer-controller -f
+
+# Look for:
+# ✅ "successfully built model" → controller is processing Ingress
+# ❌ "AccessDenied" → IRSA misconfigured
+# ❌ "failed to build model" → annotation or spec error
+
+# Verify service account has the IAM role annotation
+kubectl get sa aws-load-balancer-controller -n kube-system -o yaml
+# Should show: eks.amazonaws.com/role-arn: arn:aws:iam::...:role/...
+```
+
 ---
 
 ## 3. Failure Scenarios

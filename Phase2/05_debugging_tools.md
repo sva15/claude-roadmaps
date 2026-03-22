@@ -397,6 +397,10 @@ for url in https://google.com https://github.com https://aws.amazon.com https://
   echo "=== $url ==="
   curl -w "dns:%{time_namelookup}s tcp:%{time_connect}s tls:%{time_appconnect}s ttfb:%{time_starttransfer}s total:%{time_total}s code:%{http_code}\n" -o /dev/null -s $url
 done
+
+# Expected result: You can identify which phase (dns/tcp/tls/ttfb) is the
+# bottleneck for each URL and explain why (e.g., "high dns = cold cache,
+# high ttfb = slow server processing, high tls = distant server + 2 RTTs").
 ```
 
 ### Lab 2: tcpdump a 3-Way Handshake
@@ -415,6 +419,9 @@ curl http://example.com
 # 4. HTTP GET [P.]
 # 5. Response [P.]
 # 6. FIN packets [F.]
+#
+# Expected result: You can label each packet in the output by its role in
+# the TCP lifecycle and identify the 3-way handshake vs data transfer vs close.
 ```
 
 ### Lab 3: Debug a Simulated Failure

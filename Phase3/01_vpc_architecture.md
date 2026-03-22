@@ -424,6 +424,9 @@ aws ec2 describe-route-tables --filters "Name=association.subnet-id,Values=subne
   --query 'RouteTables[*].Routes' --output json
 
 # Determine: which subnets are public (IGW route) vs private (NAT GW route)?
+
+# Expected result: You can draw a table listing each subnet with its AZ, CIDR,
+# and classification (public/private/isolated) based on the route table's default route.
 ```
 
 ### Lab 2: Trace a Packet Path
@@ -440,6 +443,9 @@ Path:
 4. ALB → Pod IP (private subnet): new connection, passes through private subnet NACL, pod SG
 5. Pod processes request, responds
 6. Response: Pod → ALB → Client (reverse path, SGs auto-allow, NACLs need ephemeral ports)
+
+Expected result: You can name the SG and NACL checks at each hop (6 total:
+2 SGs + 4 NACLs) and explain why ephemeral ports matter for the response.
 ```
 
 ---
@@ -505,6 +511,100 @@ Key uses:
 - Identify data exfiltration (large outbound bytes to unexpected IPs)
 - Audit compliance (prove no traffic between isolated tiers)
 - Debug connectivity (find the REJECT that's causing timeout)
+```
+
+### Debugging with VPC Flow Logs — The Complete Walkthrough
+
+**Step 1: Enable Flow Logs**
+```bash
+# Enable on a VPC (send to CloudWatch Logs)
+aws ec2 create-flow-logs \
+  --resource-type VPC \
+  --resource-ids vpc-xxxxx \
+  --traffic-type ALL \
+  --log-group-name /vpc/flow-logs \
+  --deliver-logs-permission-arn arn:aws:iam::123456789:role/flowlog-role
+
+# Or send to S3 (cheaper for long-term storage)
+aws ec2 create-flow-logs \
+  --resource-type VPC \
+  --resource-ids vpc-xxxxx \
+  --traffic-type ALL \
+  --log-destination-type s3 \
+  --log-destination arn:aws:s3:::my-flowlog-bucket
+```
+
+**Step 2: Reading Flow Log Records**
+```
+Fields:
+version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
+
+Protocol numbers: 6=TCP, 17=UDP, 1=ICMP
+
+Example records:
+2 123456789 eni-abc123 10.0.1.50 10.0.2.100 54321 443 6 10 840 1620000000 1620000060 ACCEPT OK
+→ TCP traffic 10.0.1.50 → 10.0.2.100:443 was ACCEPTED (SG+NACL both allowed)
+
+2 123456789 eni-abc123 203.0.113.5 10.0.1.50 12345 22 6 3 180 1620000000 1620000060 REJECT OK
+→ External IP tried SSH (port 22) to 10.0.1.50 → REJECTED (SG or NACL blocked)
+
+Key insight: Flow Logs show ACCEPT/REJECT but DON'T tell you whether
+it was the SG or NACL that rejected. You must check both manually.
+```
+
+**Step 3: CloudWatch Log Insights Queries**
+```sql
+-- Find all REJECTED traffic (the first query to run during any connectivity issue)
+filter action = "REJECT"
+| stats count(*) as rejections by srcAddr, dstAddr, dstPort
+| sort rejections desc
+| limit 20
+
+-- Find who is trying to reach a specific port (e.g., SSH scans)
+filter dstPort = 22 and action = "REJECT"
+| stats count(*) as attempts by srcAddr
+| sort attempts desc
+
+-- Traffic volume between two specific hosts
+filter (srcAddr = "10.0.1.50" and dstAddr = "10.0.2.100")
+   or (srcAddr = "10.0.2.100" and dstAddr = "10.0.1.50")
+| stats sum(bytes) as totalBytes, count(*) as flows by srcAddr, dstAddr, action
+| sort totalBytes desc
+
+-- Find top talkers (data exfiltration detection)
+filter action = "ACCEPT"
+| stats sum(bytes) as totalBytes by srcAddr, dstAddr
+| sort totalBytes desc
+| limit 10
+
+-- Debug a specific failing connection
+filter (srcAddr = "10.0.1.50" and dstAddr = "10.0.2.100" and dstPort = 5432)
+| fields @timestamp, srcAddr, dstAddr, srcPort, dstPort, action, protocol
+| sort @timestamp desc
+| limit 50
+```
+
+**Step 4: Worked Example — "Pod Can't Reach RDS"**
+```
+Problem: EKS pod (10.0.10.55) can't connect to RDS (10.0.100.10:5432)
+
+1. Query Flow Logs:
+   filter srcAddr="10.0.10.55" and dstAddr="10.0.100.10" and dstPort=5432
+
+2. Result: action=REJECT
+   → Traffic is being blocked by SG or NACL
+
+3. Check Security Group on RDS:
+   aws ec2 describe-security-groups --group-ids sg-rds-xxx
+   → Inbound: Allow TCP 5432 from sg-app-xxx
+   
+4. Check SG on pod's ENI:
+   → Pod's ENI is in sg-eks-node-xxx, NOT sg-app-xxx
+   
+5. Root cause: RDS SG allows from sg-app-xxx but pod is in sg-eks-node-xxx
+   Fix: Add sg-eks-node-xxx to RDS SG inbound rule, or use a shared SG
+
+6. Verify: Re-run Flow Log query → action=ACCEPT ✓
 ```
 
 ---

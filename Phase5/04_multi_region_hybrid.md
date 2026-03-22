@@ -164,6 +164,90 @@ Options for cross-cluster pod communication:
    → Complex to operate
 ```
 
+### Traffic Acceleration — Route53 vs Global Accelerator vs CloudFront
+
+```
+Which to use for global traffic?
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ Service           │ Layer │ Best For                                │
+├───────────────────┼───────┼─────────────────────────────────────────┤
+│ Route53 (Latency) │ DNS   │ Multi-region with existing ALBs.       │
+│                   │       │ Free (just DNS). Simple.                │
+│                   │       │ Failover depends on TTL (60-90s).       │
+├───────────────────┼───────┼─────────────────────────────────────────┤
+│ Global Accelerator│ L4    │ Static IPs + anycast routing.           │
+│                   │       │ TCP/UDP enters AWS backbone at edge.    │
+│                   │       │ Instant failover (<30s, no DNS TTL).    │
+│                   │       │ ~$0.025/hr + $0.015/GB.                 │
+├───────────────────┼───────┼─────────────────────────────────────────┤
+│ CloudFront        │ L7    │ Static content caching at edge.         │
+│                   │       │ HTTPS termination at 400+ edge locs.    │
+│                   │       │ Best for: websites, APIs with cacheable │
+│                   │       │ responses, media delivery.              │
+└──────────────────────────────────────────────────────────────────────┘
+
+Decision:
+  Static content + caching?     → CloudFront
+  Dynamic APIs, need static IPs? → Global Accelerator
+  Simple multi-region, cost-sensitive? → Route53 latency routing
+  Need instant failover (<30s)? → Global Accelerator (not DNS-based)
+```
+
+### Inter-Region Transit Gateway Peering
+
+```
+Region: us-east-1                     Region: eu-west-1
+┌────────────────────┐               ┌────────────────────┐
+│   TGW-East         │◄═══ TGW ════►│   TGW-West         │
+│   ├─ VPC-Prod-East │   Peering    │   ├─ VPC-Prod-West │
+│   ├─ VPC-Shared    │  (encrypted, │   ├─ VPC-Shared    │
+│   └─ VPN-OnPrem    │   private)   │   └─ VPC-DR        │
+└────────────────────┘               └────────────────────┘
+
+TGW-East Route Table:
+  10.0.0.0/16 → VPC-Prod-East      (local)
+  10.2.0.0/16 → VPC-Shared          (local)
+  10.1.0.0/16 → TGW Peering         (cross-region → eu-west-1)
+
+Key facts:
+  → Traffic stays on AWS backbone (private, encrypted)
+  → Bandwidth: up to 50 Gbps per peering
+  → Data transfer: ~$0.02/GB (cross-region)
+  → Use for: cross-region database replication, DR failover, 
+    centralized services accessed from both regions
+```
+
+### RPO/RTO and DNS TTL Considerations
+
+```
+DNS-Based Failover (Route53):
+  TTL = 60s:
+    → Worst case: 60s stale DNS cache + 30s health check detection = ~90s RTO
+    → Most clients see failover in ~60-90 seconds
+  
+  TTL = 300s (5 min):
+    → Worst case: 300s + 30s = ~330s RTO (5.5 minutes!)
+    → Cheaper (fewer DNS queries) but slower failover
+  
+  Best practice:
+    → Health check interval: 10s, threshold: 2 (fastest detection)
+    → TTL: 60s (balance between speed and DNS load)
+    → Pre-failover: lower TTL to 10s before planned maintenance
+
+Global Accelerator Failover:
+  → No DNS TTL dependency
+  → Health check detects failure in ~10-30s
+  → Traffic shifts at the anycast routing level
+  → RTO: typically 10-30 seconds
+
+RPO (Recovery Point Objective):
+  Aurora Global DB:    RPO < 1 second (async, minimal lag)
+  RDS Cross-Region:    RPO = minutes (replication lag)
+  DynamoDB Global:     RPO < 1 second (last writer wins)
+  S3 Cross-Region:     RPO = minutes (CRR is async)
+```
+
 ---
 
 ## 3. Failure Scenarios
