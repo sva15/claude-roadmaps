@@ -1,0 +1,340 @@
+Configure providers
+Overview
+Provider requirements
+Dependency lock file
+provider block reference
+terraform block reference
+
+Resources
+Overview
+Configure a resource
+Destroy a resource
+resource block reference
+
+Data sources
+Query infrastructure data
+data block reference
+
+Variables
+Use variables
+variable block reference
+
+Locals
+Use locals
+locals block reference
+
+Outputs
+Use outputs
+output block reference
+
+Modules
+Overview
+Use modules
+
+Develop modules
+module block reference
+Meta-arguments
+
+Sensitive data
+Manage sensitive data
+Use temporary write-only arguments
+Ephemeral values in resources
+ephemeral block reference
+
+Backends
+Configure a backend
+local
+remote
+azurerm
+consul
+cos
+gcs
+http
+Kubernetes
+oci
+oss
+pg
+s3
+
+Search and import
+Overview
+Import resources in bulk
+Import a single resource
+Generate configuration for single imports
+import block reference
+list block reference
+
+State
+Overview
+Purpose
+Manage state in remote backends
+Refactor state
+Remove a resource from state
+Locking
+Workspaces
+Remote state
+removed block reference
+moved block reference
+
+Stacks
+Overview
+Update from beta to general availability
+Use cases
+Design a Stack
+
+Create a Stack
+
+Define deployments
+
+Test and validate
+Validate your configuration
+
+Test your configuration
+check block reference
+
+Extend CRUD operations
+Invoke actions
+Post-apply operations
+Provisioners
+action block reference
+UPGRADE
+Upgrade to v1.14
+v1.x compatibility promises
+REFERENCE
+Style guide
+
+Syntax
+Overview
+Configuration syntax
+JSON configuration syntax
+Attributes as blocks
+
+Files and configuration structure
+Overview
+Override files
+Dependency lock file
+Test files
+Query files
+Stack files
+
+Configuration blocks
+action
+check
+data
+ephemeral
+import
+locals
+module
+moved
+output
+provider
+removed
+resource
+terraform
+variable
+
+Stack blocks
+
+Component configuration
+Overview
+component
+stack
+required_providers
+provider
+variable
+output
+removed
+locals
+
+Deployment configuration
+Overview
+deployment
+deployment_group
+deployment_auto_approve
+identity_token
+store
+publish_output
+upstream_input
+locals
+
+Query blocks
+list
+locals
+provider
+variable
+
+Meta-arguments
+Overview
+count
+depends_on
+for_each
+lifecycle
+provider
+providers
+
+Built-in resources
+terraform_data resource reference
+The terraform_remote_state data source
+
+Expressions
+Overview
+Types and values
+Strings and templates
+References to values
+Operators
+Function calls
+Conditional expressions
+For expressions
+Splat expressions
+Dynamic blocks
+Type constraints
+Version constraints
+
+Functions
+Overview
+
+Numeric functions
+abs
+ceil
+floor
+log
+max
+min
+parseint
+pow
+signum
+
+String functions
+chomp
+endswith
+format
+formatlist
+indent
+join
+lower
+regex
+regexall
+replace
+split
+startswith
+strcontains
+strrev
+substr
+templatestring
+title
+trim
+trimprefix
+trimsuffix
+trimspace
+upper
+
+Collection functions
+alltrue
+anytrue
+chunklist
+coalesce
+coalescelist
+compact
+concat
+contains
+distinct
+element
+flatten
+index
+keys
+length
+list
+lookup
+map
+matchkeys
+merge
+one
+range
+reverse
+setintersection
+setproduct
+setsubtract
+setunion
+slice
+sort
+sum
+transpose
+values
+zipmap
+
+Encoding functions
+base64decode
+base64encode
+base64gzip
+csvdecode
+jsondecode
+jsonencode
+textdecodebase64
+textencodebase64
+urlencode
+yamldecode
+yamlencode
+
+Filesystem functions
+abspath
+dirname
+pathexpand
+basename
+file
+fileexists
+fileset
+filebase64
+templatefile
+
+Date and time functions
+formatdate
+plantimestamp
+timeadd
+timecmp
+timestamp
+
+Hash and crypto functions
+base64sha256
+base64sha512
+bcrypt
+filebase64sha256
+filebase64sha512
+filemd5
+filesha1
+filesha256
+filesha512
+md5
+rsadecrypt
+sha1
+sha256
+sha512
+uuid
+uuidv5
+
+IP network functions
+cidrhost
+cidrnetmask
+cidrsubnet
+cidrsubnets
+
+Type conversion functions
+can
+ephemeralasnull
+issensitive
+nonsensitive
+sensitive
+tobool
+tolist
+tomap
+tonumber
+toset
+tostring
+try
+type
+
+Terraform-specific functions
+provider::terraform::encode_tfvars
+provider::terraform::decode_tfvars
+provider::terraform::encode_expr
+terraform.applying
+Internals
