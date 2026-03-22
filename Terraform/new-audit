@@ -1,0 +1,145 @@
+Good idea — let me now cross-reference the official docs list against your 19 files systematically and give you a complete gap analysis.
+
+**What your 19 files already cover from this list:**
+
+Going through each section — providers block, lock file, resource block, variables, locals, outputs, modules, sensitive data (partially), S3 backend, import command, state commands, moved block, workspaces, remote state, count/for_each/lifecycle meta-arguments, dynamic blocks, for expressions, conditional expressions, terraform test/validate — all present in good depth.
+
+**What's missing — complete list by priority:**
+
+---
+
+### 🔴 Must-add (you'll hit these in every real project or interview)
+
+**1. Data sources** *(already flagged as Gap 1)*
+The entire `data block reference` + `Query infrastructure data` section. Missing from all 19 files conceptually despite being used in examples everywhere.
+
+**2. Functions — the production-critical subset**
+The docs list has 70+ functions but you only need to document ~15 that appear in every real Terraform project:
+
+| Function | Why you need it |
+|---|---|
+| `cidrsubnet(cidr, newbits, netnum)` | Calculating subnet CIDRs from a VPC CIDR — used in every VPC module |
+| `cidrhost(cidr, hostnum)` | Getting specific IPs from a CIDR (NAT gateway IPs, etc.) |
+| `cidrsubnets(cidr, newbits...)` | Carving multiple subnets at once |
+| `flatten(list_of_lists)` | Flattening nested structures for for_each — used in your 5.1 examples but never explained |
+| `merge(map1, map2...)` | Merging tag maps — used in every module but not explained |
+| `lookup(map, key, default)` | Safe map access with default — prevents errors on missing keys |
+| `jsonencode(value)` | Converting HCL to JSON for IAM policies, ECS task definitions |
+| `jsondecode(string)` | Parsing JSON responses from data sources |
+| `templatefile(path, vars)` | Rendering user_data scripts, policy templates |
+| `toset(list)` | Converting a list to a set for for_each — used constantly |
+| `try(expression, fallback)` | Safe attribute access — prevents errors on optional attributes |
+| `can(expression)` | Boolean test for whether an expression succeeds — used in validations |
+| `coalesce(val1, val2...)` | First non-null value — essential for optional variable patterns |
+| `format(fmt, args...)` | String formatting for resource names |
+| `length(collection)` | Count elements — used in every validation |
+
+These aren't "nice to have" — `cidrsubnet`, `flatten`, `merge`, `jsonencode`, and `toset` appear in virtually every production Terraform project. Not documenting them means you'll look them up mid-project constantly.
+
+**3. Ephemeral values** (`ephemeral block reference`, `Use temporary write-only arguments`)
+This is Terraform 1.10+ and increasingly appearing in JDs. Ephemeral values exist in memory during plan/apply but are never written to state. This is the real solution to the state-secrets problem you documented honestly in 4.3. Example: an ephemeral block for a database password that gets used during apply but never hits state. This closes the gap your 4.3 correctly identified as "Terraform's limitation."
+
+**4. Declarative `import` block** (`import block reference`, `Generate configuration for single imports`)
+Your 2.3 covers `terraform import` (the CLI command). That's the old way. Terraform 1.5+ has declarative import blocks in HCL that are reviewed in plan output, committed to code, and removed after apply. This is now the recommended approach and increasingly what interviewers ask for:
+```hcl
+import {
+  to = aws_vpc.main
+  id = "vpc-0abc123"
+}
+```
+And `terraform plan -generate-config-out=generated.tf` which auto-generates the resource block from the real infrastructure — massive time saver when importing existing infra.
+
+**5. `removed` block** (`Remove a resource from state`, `removed block reference`)
+Your 2.3 covers `terraform state rm` (the CLI command). Terraform 1.7+ has the declarative `removed` block — the counterpart to `moved`. You declare the resource is removed from management without deleting it. This is the pattern replacing `terraform state rm` for most use cases:
+```hcl
+removed {
+  from = aws_instance.old
+  lifecycle {
+    destroy = false  # remove from state but don't destroy
+  }
+}
+```
+
+---
+
+### 🟡 Should-add (complete the roadmap, appear in senior interviews)
+
+**6. `check` block** (`Validate your configuration`, `check block reference`)
+Terraform 1.5+ continuous validation. Different from variable validation — check blocks run on every plan/apply and can query data sources to validate post-deployment conditions:
+```hcl
+check "health_check" {
+  data "http" "endpoint" {
+    url = "https://${aws_lb.main.dns_name}/health"
+  }
+  assert {
+    condition     = data.http.endpoint.status_code == 200
+    error_message = "Health check failed after deployment"
+  }
+}
+```
+This is infrastructure smoke testing built into Terraform. Not having this documented means missing a modern Terraform capability that's becoming standard.
+
+**7. `terraform_data` resource** (`terraform_data resource reference`)
+This is the replacement for `null_resource` (which required the null provider). `terraform_data` is built-in since Terraform 1.4 — no provider needed. Used for triggers, arbitrary local executions, and as a dependency anchor:
+```hcl
+resource "terraform_data" "bootstrap" {
+  triggers_replace = [aws_instance.web.id]
+  provisioner "local-exec" {
+    command = "ansible-playbook -i ${aws_instance.web.public_ip} playbook.yml"
+  }
+}
+```
+Any documentation using `null_resource` is now outdated. `terraform_data` replaces it.
+
+**8. `depends_on` deep dive**
+Your 1.3 mentions `depends_on` as a last resort but doesn't explain *when* you actually need it. The real scenarios: (a) when a resource depends on another's *side effects* rather than its attributes (an IAM policy being attached before an instance that needs the permission), (b) when using modules where the dependency can't be inferred from outputs. Without knowing this, engineers either overuse it (slowing plans) or miss it when they need it.
+
+**9. Splat expressions**
+`aws_subnet.public[*].id` — you use this in 1.4 examples but never explain it. It's the concise alternative to a for expression when you want all instances of a resource attribute. Both styles appear in interviews.
+
+---
+
+### 🟢 Complete coverage (worth adding for thoroughness, less urgent)
+
+**10. Stacks** (`Stacks` section)
+Terraform Stacks is a new HCP Terraform (cloud) feature for managing related configurations as a unit with deployments. It's enterprise/cloud-focused and not needed for on-prem or open-source Terraform. Worth a brief document noting it exists and when it's relevant, but not a priority unless targeting HCP Terraform roles specifically.
+
+**11. Provisioners**
+The docs list includes provisioners but Terraform's own docs say "last resort." Still worth a brief document: what they are, why they're discouraged (can't be planned, break idempotency), and the two legitimate cases (`local-exec` for one-time bootstrap, `file` for seeding config). Interviewers sometimes ask "what are provisioners and why do you avoid them?"
+
+**12. Variable loading precedence**
+*(Already flagged as Gap 2)* — in the Variables section, the docs list "Use variables" which covers this but your 1.2 doesn't.
+
+**13. Other backends**
+GCS (for GCP), azurerm (for Azure), pg (for small teams without S3). Not needed if you're AWS-focused, but worth a one-page reference for completeness.
+
+**14. Partial apply recovery + `-target` flag**
+*(Already flagged as Gap 3)* — in the State section.
+
+---
+
+### What you can safely skip
+
+- JSON configuration syntax — almost never used in practice
+- Override files — niche edge case for enterprise configs
+- Stack blocks (deployment, deployment_group, etc.) — HCP Terraform enterprise only
+- Action blocks — Terraform 1.14+, very new, not in JDs yet
+- `terraform.applying` function — niche use case
+- All hash/crypto functions except `md5` and `sha256` — rarely needed
+- Most date/time functions except `timestamp` and `formatdate`
+
+---
+
+### Summary — the 5 new documents to write
+
+| Document | Priority | Why |
+|---|---|---|
+| `1.5-data-sources.md` | 🔴 Must-have | In every screening interview, used in every project |
+| `1.6-functions.md` | 🔴 Must-have | `cidrsubnet`, `flatten`, `merge`, `jsonencode`, `toset`, `try` — you can't build a real project without these |
+| `1.7-expressions.md` | 🟡 Should-have | Splat, type constraints, `try`/`can`, string templates — fills the expression gaps |
+| `2.4-import-block-and-removed.md` | 🔴 Must-have | Declarative import + removed blocks replace CLI commands — interviewers are already asking about these |
+| `5.5-ephemeral-and-check-blocks.md` | 🟡 Should-have | Closes the "state secrets problem" honestly + continuous validation |
+
+Plus the **capstone project document** (Gap 4 from the previous audit) which remains the highest-value single addition for real project readiness.
+
+The existing 19 files cover roughly 60% of this official concepts list. The 5 new documents above would bring that to ~80%, covering everything that matters for interviews and real production work. The remaining 20% (stacks, JSON syntax, override files, niche functions) is either enterprise-specific or rarely encountered.
