@@ -1,0 +1,153 @@
+How to read this — the dependency chain
+
+These concepts build on each other. Each one unlocks the next. The tags show you exactly why each concept matters for your job.
+
+foundation breaks everything if missing
+k8s debug needed to debug kubernetes
+aws needed to design aws infra
+incident needed in production incidents
+Part 1 — Linux internals (week 1)
+Why this matters: Every container is just a Linux process. When a K8s pod crashes, you're debugging a process. When a pipeline hangs, it's a stuck process. If you don't understand PIDs, parent/child relationships, and signals — you're guessing, not debugging.
+1
+Run
+ps aux
+and
+pstree
+. Find the parent of your shell. Trace back to PID 1 (init/systemd).
+2
+Run a sleep process in background. Find its PID. Send
+SIGTERM
+then
+SIGKILL
+. Understand the difference — one can be caught, one cannot.
+3
+Run a Docker container. On the host, run
+ps aux | grep
+to find the container's process. It's just a process — no magic.
+4
+Use
+/proc/[PID]/
+to inspect a running process — its open files, environment, memory maps.
+Can you explain: Why does killing a parent process sometimes kill children? What is a zombie process and when does it happen?
+Why this matters: Docker and Kubernetes are not magic. They are Linux namespaces (isolation) + cgroups (resource limits). If you understand these two primitives, you can explain every container behaviour — including why a container "thinks" it's the only thing running, and why resource limits in K8s work the way they do.
+1
+Run
+lsns
+to list all namespaces on your machine. Run a container and compare — see the new PID, net, and mount namespaces created.
+2
+Use
+unshare --pid --fork --mount-proc bash
+to manually create a new PID namespace. Run
+ps aux
+inside — only your bash shows up. You just made a container manually.
+3
+Find the cgroup for a running Docker container under
+/sys/fs/cgroup/
+. Read its memory limit. Change it with
+docker update --memory
+and watch the cgroup file update.
+4
+Set a K8s pod with a 50m CPU limit. Stress it. Watch
+kubectl top pod
+and explain why it throttles but doesn't die.
+Can you explain: What is the difference between a namespace and a cgroup? Why does a container see PID 1 for its own process?
+Why this matters: Logs are file descriptors. Pipelines pipe stdout to stdin. A CI step failing silently is often a file descriptor issue. "Too many open files" errors in production are FD exhaustion. This is the plumbing behind everything.
+1
+Run a process. Use
+ls -la /proc/[PID]/fd/
+to see all its open file descriptors. Identify stdin (0), stdout (1), stderr (2), plus any open files/sockets.
+2
+Reproduce "too many open files": write a script that opens 1000 files without closing them. Watch
+ulimit -n
+and understand how to change it.
+3
+Trace a real pipeline:
+cat file | grep pattern | wc -l
+. Draw what the kernel is doing — three processes, two pipes, how data flows.
+4
+Redirect stderr to a file, stdout to another. Then redirect both to the same file. Explain the order of operations and why
+2>&1
+position matters.
+Can you explain: Why does command > file 2>&1 work differently from command 2>&1 > file?
+Why this matters: Every production incident starts with "the server is slow." If you can't read a load average or interpret top, you can't diagnose anything. This is the first thing you check during any incident.
+1
+Use
+top
+, then
+htop
+. Understand every column — what is %wa (iowait)? What does a high load average with low CPU mean? (Answer: I/O wait or too many processes in D state.)
+2
+Use
+vmstat 1
+during a stress test. Read the 'b' (blocked) and 'wa' columns. Understand what they tell you.
+3
+Use
+iostat -x 1
+to find a disk-bound process. Use
+iotop
+to identify which process is causing it.
+4
+Use
+free -h
+and understand the difference between used, available, and cached memory. Why is "used" memory not always a problem?
+Can you explain: A server has load average 8.0 on a 4-core machine but CPU is only 20%. What's happening and how do you find the cause?
+Part 2 — Networking (week 2)
+Why this matters: Every microservice call, every kubectl command, every Terraform API call is TCP. Security groups, NACLs, and K8s network policies are all filtering TCP. If you can't explain the three-way handshake and connection states, you can't design or debug any networked system.
+1
+Run
+tcpdump -i any port 80
+while doing
+curl http://example.com
+. Watch the SYN → SYN-ACK → ACK handshake in real packets.
+2
+Run
+ss -tnp
+to see all TCP connections and their states. Find a connection in ESTABLISHED, TIME_WAIT, and CLOSE_WAIT. Explain what each state means.
+3
+Deliberately connect to a closed port. Capture the RST packet with tcpdump. Now connect to a firewall-blocked port — notice the difference (RST vs silence/timeout).
+4
+Use
+curl -v
+and watch the full connection lifecycle — DNS, TCP connect, TLS handshake, HTTP request, response. Map each line to the TCP/IP layer it operates on.
+Can you explain: A service times out vs connection refused — what does each tell you about where the failure is?
+Why this matters: In Kubernetes, CoreDNS resolves service names. In AWS, Route53 resolves everything. 80% of "I can't connect to service X" issues are actually DNS issues. The engineer who understands DNS resolution is the one who solves incidents fastest.
+1
+Use
+dig google.com
+and read the full output. Understand the QUESTION, ANSWER, and AUTHORITY sections. What is the TTL?
+2
+Trace a DNS resolution:
+dig +trace google.com
+. Watch it go from root servers → TLD → authoritative. Understand the chain of trust.
+3
+In a running K8s pod, run
+cat /etc/resolv.conf
+. Understand the search domains. Then do
+dig kubernetes.default.svc.cluster.local
+and explain what each part of that name means.
+4
+Simulate a DNS failure: in a K8s pod, try to reach a service by IP vs by name. Use
+kubectl exec
++
+nslookup
+to debug CoreDNS. This is a real interview scenario.
+Can you explain: A K8s pod can reach 8.8.8.8 but not a service in the same cluster. Walk through your diagnosis steps.
+Part 3 — applied to real K8s + AWS debugging (week 3)
+Why this matters: This is the senior interview scenario. "A request is failing — walk me through how you'd debug it." If you can trace the path from internet → DNS → ALB → K8s ingress → service → pod, you can answer any debugging question.
+1
+Deploy a simple app on EKS with an ALB ingress. Then break it 5 different ways: wrong DNS, wrong security group, wrong target group, pod crash, wrong port. Debug each using only fundamentals.
+2
+Use
+kubectl exec
+into a pod and run
+curl
+,
+nslookup
+,
+wget
+against other services. Build a mental model of what can reach what and why.
+3
+Add a network policy that blocks all ingress. Watch things break. Add rules back one by one until it works. Explain every rule in plain English.
+4
+Draw the network path of a request on paper — every hop, every security check, every DNS lookup — before you build it. Then build it and verify your drawing was correct.
+The final test: A colleague says "users are getting 503 errors." You have 10 minutes. Walk through your diagnosis out loud, step by step, without opening any documentation. If you can do this — you're ready.

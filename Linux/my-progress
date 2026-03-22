@@ -1,0 +1,25 @@
+Track your progress — tick when you can do it without docs
+
+Not when you've watched a video. When you can actually do it.
+
+0 of 20 complete
+Explain what happens when you run a command in a shell — fork, exec, PID
+Trace a Docker container to its host process using ps aux
+Manually create a namespace using unshare — explain what you did
+Find a container's cgroup and read its memory limit
+Reproduce 'too many open files' and fix it with ulimit
+Diagnose a high load average scenario — identify if it's CPU, I/O, or process wait
+Capture a TCP three-way handshake with tcpdump
+Explain the difference between connection refused and connection timeout
+Use dig +trace and explain each step of DNS resolution
+Debug a DNS failure inside a K8s pod using nslookup and resolv.conf
+Create two network namespaces and connect them with a veth pair
+Build a VPC in AWS manually — no wizard — and explain every route table rule
+Inspect a TLS certificate with openssl and explain the chain
+Generate a self-signed cert and use it in a local nginx
+Deploy an app on K8s and trace a request from ingress to pod
+Break service-to-service comms with a NetworkPolicy and restore it
+Debug a 503 on EKS using only VPC flow logs and kubectl describe
+Explain subnetting — what makes a /24 different from a /16
+Explain what happens at each network layer when you do curl https://google.com
+Do a 10-minute no-docs incident diagnosis out loud and record it

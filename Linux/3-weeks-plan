@@ -1,0 +1,70 @@
+Week 1
+Linux internals
+~1.5 hrs/day
+Mon
+Processes + PIDs. Read: how Linux process scheduling works. Exercise: trace a Docker container back to its host PID.
+90 min
+Tue
+Namespaces + cgroups. Manually create a namespace with unshare. Find a container's cgroup. Understand K8s resource limits.
+90 min
+Wed
+File descriptors + I/O. Reproduce "too many open files". Understand stdin/stdout/stderr redirection fully.
+90 min
+Thu
+System performance. Use top, vmstat, iostat during a stress test. Diagnose a high-load scenario.
+90 min
+Fri
+Explain day — no new content. Explain this week's concepts to someone or write a short blog post. If you can't explain it, you haven't learned it.
+60 min
+Weekend
+Build: set up a VM (Hetzner CX11 = ₹300/mo). Break things intentionally. Debug from first principles. Read one Julia Evans zine.
+2–3 hrs
+Week 2
+Networking
+~1.5 hrs/day
+Mon
+TCP/IP. Use tcpdump to capture a real handshake. Understand all TCP states. Connection refused vs timeout — know the difference.
+90 min
+Tue
+DNS deep dive. dig +trace every domain you can think of. Debug a broken DNS in a K8s pod. Understand CoreDNS search domains.
+90 min
+Wed
+Subnets + routing. Create two network namespaces, connect with veth pair. Build a mental VPC in your terminal before building in AWS.
+90 min
+Thu
+TLS. Inspect real certificates with openssl. Generate your own CA. Understand what breaks when a cert expires in production.
+90 min
+Fri
+Explain day. Draw the full network stack from application layer to physical. Explain what happens at each layer when you do curl https://google.com.
+60 min
+Weekend
+Build a VPC in AWS by hand — no wizard. Every subnet, route table, security group created manually. Break it and fix it.
+2–3 hrs
+Week 3
+Applied — K8s + AWS debugging
+~1.5 hrs/day
+Mon
+Deploy app on local K8s (kind or minikube). Break it 3 ways. Debug each using only week 1–2 knowledge. No Googling the symptom.
+90 min
+Tue
+K8s networking: add NetworkPolicy, break service-to-service communication, restore it. Explain every rule you write.
+90 min
+Wed
+AWS: deploy the same app on EKS with ALB. Break it with wrong security group. Debug using VPC flow logs + kubectl describe.
+90 min
+Thu
+503 simulation. Kill pods, misconfigure DNS, wrong port. Practice the "10-minute diagnosis" out loud for each failure mode.
+90 min
+Fri
+Final proof test. Sit down, no docs. Answer: explain what happens when a K8s pod can't reach a service. Every hop. Every check. Time yourself.
+60 min
+Weekend
+Write a 1-page incident postmortem for something you broke and fixed this week. This is your interview story.
+2 hrs
+Resources — free or near-free
+
+Julia Evans zines (jvns.ca) — best Linux + networking writing anywhere. Start with "How DNS Works" and "Networking! ACK!"
+"The Linux Command Line" by William Shotts — free online. Read chapters on processes and signals.
+Hetzner CX11 or AWS free tier for a practice VM. Break things there, not in your head.
+Wireshark — for visualising TCP/TLS handshakes. There's no substitute for seeing real packets.
+KillerCoda.com — free K8s playground with networking scenarios already set up.
